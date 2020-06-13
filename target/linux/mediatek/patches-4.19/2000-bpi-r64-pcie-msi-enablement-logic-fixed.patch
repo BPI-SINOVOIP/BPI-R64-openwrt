@@ -1,0 +1,141 @@
+diff -uprN a/drivers/pci/controller/pcie-mediatek.c b/drivers/pci/controller/pcie-mediatek.c
+--- a/drivers/pci/controller/pcie-mediatek.c	2019-12-15 20:19:45.538393739 +0800
++++ b/drivers/pci/controller/pcie-mediatek.c	2019-12-15 20:19:34.546184378 +0800
+@@ -68,13 +68,13 @@
+ #define PCIE_SYS_CFG_V2		0x0
+ #define PCIE_CSR_LTSSM_EN(x)	BIT(0 + (x) * 8)
+ #define PCIE_CSR_ASPM_L1_EN(x)	BIT(1 + (x) * 8)
++#define PCI_CSR_ASPM_L0S_EN(x)	BIT(2 + (x) * 8)
+ 
+ /* PCIe V2 per-port registers */
++#define PCIE_KCNT_2		0x14
++#define PCIE_L1_ENTRY_LAT	GENMASK(23, 16)
++#define PCIE_L0S_ENTRY_LAT	GENMASK(15, 11)
+ #define PCIE_MSI_VECTOR		0x0c0
+-
+-#define PCIE_CONF_VEND_ID	0x100
+-#define PCIE_CONF_CLASS_ID	0x106
+-
+ #define PCIE_INT_MASK		0x420
+ #define INTX_MASK		GENMASK(19, 16)
+ #define INTX_SHIFT		16
+@@ -129,6 +129,19 @@
+ #define PCIE_LINKDOWN_RST_EN	GENMASK(15, 13)
+ #define PCIE_LINK_STATUS_V2	0x804
+ #define PCIE_PORT_LINKUP_V2	BIT(10)
++#define K_GBL_1			0x000
++#define K_CONF_FUNC0_0		0x100
++#define K_CONF_FUNC0_1		0x104
++#define K_CONF_FUNC0_2		0x108
++
++#define MTK_ROOT_PORT		((4 << 12) & 0xf000)
++#define MTK_VEND_ID		(0x14c3)
++#define MTK_DEV_ID		(0x5396)
++#define MTK_SS_VEND_ID		(0x14c3)
++#define MTK_SS_DEV_ID		(0x5396)
++
++#define K_CONF_IDS(vend, dev)	((vend & 0xffff) | \
++				((dev << 16) & 0xffff0000))
+ 
+ struct mtk_pcie_port;
+ 
+@@ -646,6 +659,7 @@ static int mtk_pcie_setup_irq(struct mtk
+ 	struct device *dev = pcie->dev;
+ 	struct platform_device *pdev = to_platform_device(dev);
+ 	int err;
++	char name[10];
+ 
+ 	err = mtk_pcie_init_irq_domain(port, node);
+ 	if (err) {
+@@ -654,6 +668,11 @@ static int mtk_pcie_setup_irq(struct mtk
+ 	}
+ 
+ 	port->irq = platform_get_irq(pdev, port->slot);
++	if (port->irq < 0) {
++		snprintf(name, sizeof(name), "pcie_irq%d", port->slot);
++		port->irq = platform_get_irq_byname(pdev, name);
++	}
++	
+ 	irq_set_chained_handler_and_data(port->irq,
+ 					 mtk_pcie_intr_handler, port);
+ 
+@@ -664,7 +683,6 @@ static int mtk_pcie_startup_port_v2(stru
+ {
+ 	struct mtk_pcie *pcie = port->pcie;
+ 	struct resource *mem = &pcie->mem;
+-	const struct mtk_pcie_soc *soc = port->pcie->soc;
+ 	u32 val;
+ 	size_t size;
+ 	int err;
+@@ -673,9 +691,30 @@ static int mtk_pcie_startup_port_v2(stru
+ 	if (pcie->base) {
+ 		val = readl(pcie->base + PCIE_SYS_CFG_V2);
+ 		val |= PCIE_CSR_LTSSM_EN(port->slot) |
+-		       PCIE_CSR_ASPM_L1_EN(port->slot);
++		       PCIE_CSR_ASPM_L1_EN(port->slot) |
++		       PCI_CSR_ASPM_L0S_EN(port->slot);
+ 		writel(val, pcie->base + PCIE_SYS_CFG_V2);
+-	}
++
++		/* correct the class ID for mt7622 */
++		val = readl(port->base + K_GBL_1);
++		val |= MTK_ROOT_PORT;
++		writel(val, port->base + K_GBL_1);
++
++		val = K_CONF_IDS(MTK_VEND_ID, MTK_DEV_ID);
++		writel(val, port->base + K_CONF_FUNC0_0);
++
++		val = (PCI_CLASS_BRIDGE_PCI << 16) & 0xffffff00;
++		writel(val, port->base + K_CONF_FUNC0_1);
++
++		val = K_CONF_IDS(MTK_SS_VEND_ID, MTK_SS_DEV_ID);
++		writel(val, port->base + K_CONF_FUNC0_2);
++	}
++
++	/* set l1_entry_latency and l0s entry latency to 4us */
++	val = readl(port->base + PCIE_KCNT_2);
++	val &= ~(PCIE_L1_ENTRY_LAT | PCIE_L0S_ENTRY_LAT);
++	val |= 0x00088000;
++	writel(val, port->base + PCIE_KCNT_2);
+ 
+ 	/* Assert all reset signals */
+ 	writel(0, port->base + PCIE_RST_CTRL);
+@@ -693,15 +732,6 @@ static int mtk_pcie_startup_port_v2(stru
+ 	       PCIE_MAC_SRSTB | PCIE_CRSTB;
+ 	writel(val, port->base + PCIE_RST_CTRL);
+ 
+-	/* Set up vendor ID and class code */
+-	if (soc->need_fix_class_id) {
+-		val = PCI_VENDOR_ID_MEDIATEK;
+-		writew(val, port->base + PCIE_CONF_VEND_ID);
+-
+-		val = PCI_CLASS_BRIDGE_PCI;
+-		writew(val, port->base + PCIE_CONF_CLASS_ID);
+-	}
+-
+ 	/* 100ms timeout value should be enough for Gen1/2 training */
+ 	err = readl_poll_timeout(port->base + PCIE_LINK_STATUS_V2, val,
+ 				 !!(val & PCIE_PORT_LINKUP_V2), 20,
+@@ -732,6 +762,7 @@ static int mtk_pcie_startup_port_v2(stru
+ 	return 0;
+ }
+ 
++
+ static void __iomem *mtk_pcie_map_bus(struct pci_bus *bus,
+ 				      unsigned int devfn, int where)
+ {
+@@ -984,11 +1015,13 @@ static int mtk_pcie_subsys_powerup(struc
+ 	struct platform_device *pdev = to_platform_device(dev);
+ 	struct resource *regs;
+ 	int err;
++	resource_size_t size;
+ 
+ 	/* get shared registers, which are optional */
+ 	regs = platform_get_resource_byname(pdev, IORESOURCE_MEM, "subsys");
+ 	if (regs) {
+-		pcie->base = devm_ioremap_resource(dev, regs);
++		size = resource_size(regs);
++		pcie->base = devm_ioremap(dev, regs->start, size);
+ 		if (IS_ERR(pcie->base)) {
+ 			dev_err(dev, "failed to map shared register\n");
+ 			return PTR_ERR(pcie->base);

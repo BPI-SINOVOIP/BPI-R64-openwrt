@@ -1,0 +1,21 @@
+diff -uprN linux-4.19.81.org/drivers/pci/controller/pcie-mediatek.c linux-4.19.81/drivers/pci/controller/pcie-mediatek.c
+--- linux-4.19.81.org/drivers/pci/controller/pcie-mediatek.c	2020-07-25 10:51:12.756189608 +0800
++++ linux-4.19.81/drivers/pci/controller/pcie-mediatek.c	2020-07-25 10:59:55.598837940 +0800
+@@ -636,14 +636,15 @@ static void mtk_pcie_intr_handler(struct
+ 		if (status & MSI_STATUS){
+ 			unsigned long imsi_status;
+ 
++			/* Clear MSI interrupt status */
++			writel(MSI_STATUS, port->base + PCIE_INT_STATUS);
++
+ 			while ((imsi_status = readl(port->base + PCIE_IMSI_STATUS))) {
+ 				for_each_set_bit(bit, &imsi_status, MTK_MSI_IRQS_NUM) {
+ 					virq = irq_find_mapping(port->inner_domain, bit);
+ 					generic_handle_irq(virq);
+ 				}
+ 			}
+-			/* Clear MSI interrupt status */
+-			writel(MSI_STATUS, port->base + PCIE_INT_STATUS);
+ 		}
+ 	}
+ 

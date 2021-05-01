@@ -8,7 +8,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=nettle
-PKG_VERSION:=3.5.1
+PKG_VERSION:=3.7.1
 PKG_RELEASE:=1
 PKG_USE_MIPS16:=0
 

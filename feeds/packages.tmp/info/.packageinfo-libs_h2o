@@ -1,0 +1,45 @@
+Source-Makefile: feeds/packages/libs/h2o/Makefile
+Build-Depends: libwslay
+Build-Depends/host: ninja/host
+
+Package: libh2o-evloop
+Version: 2.2.6-9
+Depends: +libc +GCC_LIBSSP:libssp +USE_GLIBC:librt +USE_GLIBC:libpthread +libopenssl +zlib +libyaml
+Conflicts: 
+Menu-Depends: 
+Provides: 
+Section: libs
+Category: Libraries
+Repository: base
+Title: H2O Library compiled with its own event loop
+Maintainer: James Taylor <james@jtaylor.id.au
+Source: h2o-2.2.6.tar.gz
+License: MIT
+LicenseFiles: LICENSE
+Type: ipkg
+Description: H2O Library compiled with its own event loop
+https://h2o.examp1e.net/
+James Taylor <james@jtaylor.id.au
+@@
+
+Package: libh2o
+Version: 2.2.6-9
+Depends: +libc +GCC_LIBSSP:libssp +USE_GLIBC:librt +USE_GLIBC:libpthread +libuv +libopenssl +zlib +libyaml
+Conflicts: 
+Menu-Depends: 
+Provides: 
+Section: libs
+Category: Libraries
+Repository: base
+Title: H2O Library compiled with libuv
+Maintainer: James Taylor <james@jtaylor.id.au
+Source: h2o-2.2.6.tar.gz
+License: MIT
+LicenseFiles: LICENSE
+Type: ipkg
+Description: H2O Library compiled with libuv
+https://h2o.examp1e.net/
+James Taylor <james@jtaylor.id.au
+@@
+
+

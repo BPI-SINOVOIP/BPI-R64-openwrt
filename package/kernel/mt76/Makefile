@@ -264,6 +264,7 @@ define KernelPackage/mt7615e/install
 		$(PKG_BUILD_DIR)/firmware/mt7615_cr4.bin \
 		$(PKG_BUILD_DIR)/firmware/mt7615_n9.bin \
 		$(PKG_BUILD_DIR)/firmware/mt7615_rom_patch.bin \
+		$(PKG_BUILD_DIR)/firmware/bpi-mt7615_eeprom_5g_default.bin \
 		$(1)/lib/firmware/mediatek
 endef
 

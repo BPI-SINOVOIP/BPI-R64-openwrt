@@ -1,0 +1,64 @@
+diff -uprN a/mt7615/eeprom.c b/mt7615/eeprom.c
+--- a/mt7615/eeprom.c	2022-07-20 22:29:44.423501997 +0800
++++ b/mt7615/eeprom.c	2022-07-21 11:17:40.672693524 +0800
+@@ -5,6 +5,7 @@
+  *         Felix Fietkau <nbd@nbd.name>
+  */
+ 
++#include <linux/firmware.h>
+ #include "mt7615.h"
+ #include "eeprom.h"
+ 
+@@ -67,6 +68,35 @@ static int mt7615_efuse_init(struct mt76
+ 	return 0;
+ }
+ 
++#define BPI_MT7615_EEPROM_5G_DEFAULT       	"mediatek/bpi-mt7615_eeprom_5g_default.bin"
++static int mt7615_eeprom_load_default(struct mt7615_dev *dev)
++{
++        u8 *eeprom;
++        const struct firmware *fw = NULL;
++        int ret;
++
++	ret = mt76_eeprom_init(&dev->mt76, MT7615_EEPROM_SIZE);
++	if (ret < 0)
++		return ret;
++
++	eeprom = dev->mt76.eeprom.data;
++        ret = request_firmware(&fw, BPI_MT7615_EEPROM_5G_DEFAULT, dev->mt76.dev);
++        if (ret)
++                return ret;
++
++        if (!fw || !fw->data) {
++                dev_err(dev->mt76.dev, "Invalid default bin: bpi_mt7615_eeprom_5g_default.bin\n");
++                ret = -EINVAL;
++                goto out;
++        }
++
++        memcpy(eeprom, fw->data, MT7615_EEPROM_SIZE);
++out:
++        release_firmware(fw);
++
++        return ret;
++}
++
+ static int mt7615_eeprom_load(struct mt7615_dev *dev)
+ {
+ 	int ret;
+@@ -194,9 +224,16 @@ int mt7615_eeprom_init(struct mt7615_dev
+ {
+ 	int ret;
+ 
++#if 0	
+ 	ret = mt7615_eeprom_load(dev);
+ 	if (ret < 0)
+ 		return ret;
++#else		
++	dev_warn(dev->mt76.dev, "mt7615 eeprom load disable, use default filebin\n");
++	ret = mt7615_eeprom_load_default(dev);
++	if (ret)
++		return ret;
++#endif
+ 
+ 	ret = mt7615_check_eeprom(&dev->mt76);
+ 	if (ret && dev->mt76.otp.data)
